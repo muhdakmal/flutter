@@ -24,7 +24,7 @@ class _LoginPageState extends State<LoginPage> {
       dio.options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
 
       var response = await dio.post(
-        "https://explicitly-pipeline-mo-atlas.trycloudflare.com/flutter-api/login.php",
+        "https://sun-alaska-movies-photo.trycloudflare.com/flutter-api/login.php",
         data: {
           "username": usernameController.text,
           "password": passwordController.text,
@@ -46,7 +46,7 @@ class _LoginPageState extends State<LoginPage> {
 
       String username = usernameController.text;
   await _saveUsername(username); // Simpan username sebelum navigate
-  
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => HomePage()),

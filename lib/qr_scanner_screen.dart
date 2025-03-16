@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:dio/dio.dart';
+import 'dart:convert';
 import 'dart:io';
+import 'package:geolocator/geolocator.dart';
+import 'success_page.dart'; // ✅ Page baru jika berjaya insert
+import 'failed_page.dart'; // ✅ Page baru jika berjaya insert
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
 class QRScannerScreen extends StatefulWidget {
   @override
@@ -14,7 +23,9 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     detectionSpeed: DetectionSpeed.normal,
   );
 
+  Dio dio = Dio();
   bool isTorchOn = false;
+  bool isProcessing = false;
 
   void pickImageFromFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -34,9 +45,129 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     controller.toggleTorch();
   }
 
+  Future<Position?> _getCurrentLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      print("⚠️ Servis lokasi tidak diaktifkan!");
+      return null;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        print("❌ Pengguna menolak akses lokasi");
+        return null;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      print("❌ Akses lokasi ditolak selama-lamanya!");
+      return null;
+    }
+
+    return await Geolocator.getCurrentPosition();
+  }
+
+  void _showLoadingDialog() {
+  showDialog(
+    context: context,
+    barrierDismissible: false, // ❌ Jangan bagi tutup dialog semasa loading
+    builder: (context) => AlertDialog(
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(), // ✅ Tunjuk loading
+          SizedBox(height: 10),
+          Text("Sedang memproses..."),
+        ],
+      ),
+    ),
+  );
+}
+
+void _showNotification(String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      backgroundColor: Colors.red,
+      duration: Duration(seconds: 3),
+    ),
+  );
+}
+
+
+
+  Future<void> _insertQRtoDatabase(String qrValue) async {
+    if (isProcessing) return;
+
+    setState(() {
+      isProcessing = true;
+    });
+
+    try {
+      Position? position = await _getCurrentLocation();
+      if (position == null) {
+        print("⚠️ Lokasi tidak dapat dikesan.");
+        return;
+      }
+
+      double latitude = position.latitude;
+      double longitude = position.longitude;
+
+      // 🔹 Debug: Cetak data sebelum hantar ke server
+      print("📤 Menghantar data ke server: QR = $qrValue, Latitude = $latitude, Longitude = $longitude");
+
+      var response = await dio.post(
+        "https://sun-alaska-movies-photo.trycloudflare.com/flutter-api/insert_qr.php",
+        data: {
+          "qr_value": qrValue,
+          "latitude": latitude.toString(),
+          "longitude": longitude.toString(),
+        },
+      );
+
+      // 🔹 Debug: Cetak response dari server
+      print("🔄 Response dari server: ${response.data}");
+
+      var responseData = response.data;
+      if (responseData is String) {
+        responseData = json.decode(responseData);
+      }
+
+      String message = responseData["message"] ?? "Tiada mesej dari server";
+
+      if (responseData["status"] == "success") {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SuccessPage(qrValue: qrValue, latitude: latitude, longitude: longitude),
+          ),
+        );
+      } else {
+        _showNotification(message); // ✅ Paparkan notifikasi
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => FailedPage(errorMessage: message),
+        ),
+      );
+      }
+    } catch (e) {
+      print("⚠️ Error: $e");
+    } finally {
+      setState(() {
+        isProcessing = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
-    controller.dispose(); // Hentikan scanner sebelum keluar
+    controller.dispose();
     super.dispose();
   }
 
@@ -48,38 +179,17 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           MobileScanner(
             controller: controller,
             onDetect: (capture) {
-              print("📸 QR Detected!");
-              final barcodes = capture.barcodes;
-
-              if (barcodes.isNotEmpty) {
-                String? qrValue = barcodes.first.rawValue;
-                print('📌 QR Code detected: $qrValue');
-
-                if (qrValue != null && qrValue.isNotEmpty) {
-                  // ✅ Tunjuk alert popup
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: Text("QR Code Detected"),
-                      content: Text("📌 Data: $qrValue"),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(context); // Tutup alert
-                            Navigator.pop(context, qrValue); // Kembali ke HomePage dengan QR value
-                          },
-                          child: Text("OK"),
-                        ),
-                      ],
-                    ),
-                  );
-                } else {
-                  print('⚠️ QR code kosong atau tidak boleh dibaca.');
+              if (!isProcessing) {
+                final barcodes = capture.barcodes;
+                if (barcodes.isNotEmpty) {
+                  String? qrValue = barcodes.first.rawValue;
+                  if (qrValue != null && qrValue.isNotEmpty) {
+                    _showConfirmationDialog(qrValue);
+                  }
                 }
               }
             },
           ),
-
           Center(
             child: Container(
               width: 200,
@@ -117,4 +227,32 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       ),
     );
   }
+
+ void _showConfirmationDialog(String qrValue) {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      title: Text("Confirm Insert"),
+      content: Text("Adakah anda ingin simpan data ini?\n\n📌 $qrValue"),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context); // Tutup dialog
+          },
+          child: Text("No"),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context); // Tutup dialog confirm
+            _showLoadingDialog(); // ✅ Tunjuk loading dulu
+            _insertQRtoDatabase(qrValue); // ✅ Mulakan proses insert
+          },
+          child: Text("Yes"),
+        ),
+      ],
+    ),
+  );
+}
+
 }

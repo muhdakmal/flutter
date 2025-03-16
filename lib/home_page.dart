@@ -45,7 +45,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _fetchUserName(String username) async {
   try {
-    String url = 'https://explicitly-pipeline-mo-atlas.trycloudflare.com/flutter-api/get_user.php?username=${Uri.encodeComponent(username)}';
+    String url = 'https://sun-alaska-movies-photo.trycloudflare.com/flutter-api/get_user.php?username=${Uri.encodeComponent(username)}';
     print("Fetching from: $url"); // ✅ Debug URL API
 
     Response response = await dio.get(url);
