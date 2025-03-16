@@ -148,7 +148,7 @@ void _showNotification(String message) {
           ),
         );
       } else {
-        _showNotification(message); // ✅ Paparkan notifikasi
+        //_showNotification(message); // ✅ Paparkan notifikasi
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -191,15 +191,30 @@ void _showNotification(String message) {
             },
           ),
           Center(
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.red, width: 3),
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
+  child: Column(
+    mainAxisSize: MainAxisSize.min, // Supaya column hanya guna ruang yang perlu
+    children: [
+      Text(
+        "Place QR in the scan area",
+        style: TextStyle(
+          color: Colors.white, // Warna teks putih
+          fontSize: 16, // Saiz teks
+          fontWeight: FontWeight.bold, // Tebalkan teks
+        ),
+      ),
+      SizedBox(height: 10), // Jarak antara teks dan kotak merah
+      Container(
+        width: 200,
+        height: 200,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.red, width: 3),
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    ],
+  ),
+),
+
 
           Positioned(
             bottom: 50,

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'qr_scanner_screen.dart';
 import 'settings_page.dart';
-import 'dart:convert'; // ✅ Tambah import ini untuk JSON decoding
-import 'package:shared_preferences/shared_preferences.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -12,71 +12,52 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
-
-  // Simpan nama user
   String _userName = "Loading...";
-  String? _usernameLogin; // ✅ Simpan username login
+  String? _usernameLogin;
   Dio dio = Dio();
 
-   @override
+  @override
   void initState() {
     super.initState();
-    _getSavedUsername(); // ✅ Ambil username dari SharedPreferences
+    _getSavedUsername();
   }
 
   Future<void> _getSavedUsername() async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  String? username = prefs.getString("username"); // ✅ Ambil dari storage
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? username = prefs.getString("username");
 
-  if (username != null) {
-    print("Username dari sesi: $username"); // Debugging
-    setState(() {
-      _usernameLogin = username;
-    });
+    if (username != null) {
+      setState(() {
+        _usernameLogin = username;
+      });
 
-    _fetchUserName(username); // ✅ Panggil API dengan username
-  } else {
-    print("Tiada username dalam sesi! Pengguna belum login.");
-    // Boleh redirect ke login page jika perlu
+      _fetchUserName(username);
+    }
   }
-}
-
-
 
   Future<void> _fetchUserName(String username) async {
-  try {
-    String url = 'https://sun-alaska-movies-photo.trycloudflare.com/flutter-api/get_user.php?username=${Uri.encodeComponent(username)}';
-    print("Fetching from: $url"); // ✅ Debug URL API
+    try {
+      String url =
+          'https://sun-alaska-movies-photo.trycloudflare.com/flutter-api/get_user.php?username=${Uri.encodeComponent(username)}';
 
-    Response response = await dio.get(url);
+      Response response = await dio.get(url);
 
-    print("Response status: ${response.statusCode}"); // ✅ Debug HTTP status
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.data.toString());
 
-    print("Raw response: ${response.data}"); // ✅ Debug full response
-
-    if (response.statusCode == 200) {
-      var data = jsonDecode(response.data.toString()); // ✅ Decode JSON
-
-      print("Decoded data: $data"); // ✅ Debug JSON data
-
-      if (data['status'] == "success") { 
-        setState(() {
-          _userName = data['name']; // ✅ Update UI
-        });
-      } else {
-        print("API error: ${data['message']}"); // ✅ Debug jika status bukan success
+        if (data['status'] == "success") {
+          setState(() {
+            _userName = data['name'];
+          });
+        }
       }
+    } catch (e) {
+      print("Error fetching data: $e");
     }
-  } catch (e) {
-    print("Error fetching data: $e"); // ✅ Tangkap error jika ada
   }
-}
 
-
-
-  // List halaman
   List<Widget> get _pages => [
-        HomeScreen(userName: _userName),
+        HomeScreen(userName: _userName), // ✅ Hantar userName ke HomeScreen
         QRScannerScreen(),
         SettingsPage(),
       ];
@@ -139,7 +120,6 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// Halaman HomeScreen dengan User Name
 class HomeScreen extends StatefulWidget {
   final String userName;
 
@@ -150,15 +130,63 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  Future<void> _refreshPage() async {
-    await Future.delayed(Duration(seconds: 1));
-    setState(() {});
+  Dio dio = Dio();
+  String? _attendanceStatus;
+  String? _usernameLogin;
+
+  @override
+  void initState() {
+    super.initState();
+    _getSavedUsername();
+  }
+
+  Future<void> _getSavedUsername() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? username = prefs.getString("username");
+
+    if (username != null) {
+      setState(() {
+        _usernameLogin = username;
+      });
+
+      _fetchAttendanceStatus(username);
+    }
+  }
+
+  Future<void> _fetchAttendanceStatus(String username) async {
+    try {
+      String url =
+          'https://sun-alaska-movies-photo.trycloudflare.com/flutter-api/get_attendance.php?username=${Uri.encodeComponent(username)}';
+
+      Response response = await dio.get(url);
+      var data = response.data;
+
+      if (data is String) {
+        data = jsonDecode(data);
+      }
+
+      if (data['status'] == "success") {
+        setState(() {
+          _attendanceStatus = data['check_in'];
+        });
+      } else {
+        setState(() {
+          _attendanceStatus = "Belum Check-In";
+        });
+      }
+    } catch (e) {
+      print("⚠️ Error fetching attendance: $e");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: _refreshPage,
+      onRefresh: () async {
+        if (_usernameLogin != null) {
+          await _fetchAttendanceStatus(_usernameLogin!);
+        }
+      },
       child: ListView(
         children: [
           SizedBox(height: 50),
@@ -172,8 +200,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 SizedBox(height: 10),
                 Text(
-                  "Selamat Datang, ${widget.userName}!", 
+                  "Selamat Datang, ${widget.userName}!",
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  "Status Kehadiran: ${_attendanceStatus ?? "Loading..."}",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),

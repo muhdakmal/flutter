@@ -22,7 +22,11 @@ class FailedPage extends StatelessWidget {
             SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => HomePage()), // ✅ Pergi ke home_page.dart
+                  (Route<dynamic> route) => false, // ❌ Tutup semua page sebelum ini
+                );
               },
               child: Text("Kembali"),
             ),
